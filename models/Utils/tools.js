@@ -59,9 +59,7 @@ const Tools = {
 
       logger.info(chalk.magenta.bold('🌟 开始生成表情包数据...'))
 
-      const localKeys = forceUpdate
-        ? new Set()
-        : new Set(await this.getAllKeys())
+      const localKeys = new Set(await this.getAllKeys() || [])
 
       const remoteKeysResponse = await Utils.Request.get(
         `${baseUrl}/memes/keys`
@@ -372,14 +370,12 @@ const Tools = {
 
   /**
    * 删除指定key的表情
-   * @param {string||string[]} key
-   * @returns {boolean}
+   * @param {string|string[]} keys
+   * @returns {Promise<void>}
    */
   async removeKey (keys) {
-    if (!Array.isArray(keys)) {
-      keys = [ keys ]
-    }
-    await Promise.all(keys.map((key) => db.meme.remove(key)))
+    if (!keys || (Array.isArray(keys) && !keys.length)) return
+    await db.meme.remove(keys)
   },
 
   /**

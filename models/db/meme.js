@@ -256,10 +256,19 @@ export async function getAll () {
 }
 
 /**
- * 删除指定 key 的表情包记录
- * @param {string} key - 需要删除的表情包的唯一标识符
+ * 删除指定 key 的表情包记录（支持传入单个 key 或 key 数组）
+ * @param {string|string[]} key - 需要删除的表情包唯一标识符或数组
  * @returns {Promise<boolean>} - 如果成功删除返回 `true`，否则返回 `false`
  */
 export async function remove (key) {
-  return Boolean(await table.destroy({ where: { key } }))
+  const where = Array.isArray(key) ? { key: { [Op.in]: key } } : { key }
+  return Boolean(await table.destroy({ where }))
+}
+
+/**
+ * 清空所有表情包记录
+ * @returns {Promise<boolean>}
+ */
+export async function removeAll () {
+  return Boolean(await table.destroy({ truncate: true }))
 }

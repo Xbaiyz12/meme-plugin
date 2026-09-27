@@ -6,6 +6,7 @@ import { Utils } from '#models'
 import pluginsLoader from '../../../lib/plugins/loader.js'
 import { update as Update } from '../../other/update.js'
 import { meme } from './meme.js'
+import { list } from './list.js'
 
 export class update extends plugin {
   constructor () {
@@ -121,6 +122,14 @@ export class update extends plugin {
         pluginInfo = new pluginKey.class()
       }
       await pluginInfo.updateRegExp()
+
+      // 更新完成后主动刷新/重置表情列表缓存
+      list.cache = {
+        keySignature: '',
+        img: null,
+        count: 0
+      }
+      setTimeout(() => list.init(), 1000)
 
       if (!isTask && e) {
         await e.reply('表情包数据更新完成')
