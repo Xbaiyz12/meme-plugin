@@ -259,12 +259,22 @@ const Common = {
     let avatarUrl = ''
 
     try {
-      if (e.isGroup) {
-        const member = this.e.bot.pickMember(e.group_id, qq)
-        avatarUrl = await member.getAvatarUrl()
-      } else if (e.isPrivate) {
-        const friend = this.e.bot.pickFriend(qq)
-        avatarUrl = await friend.getAvatarUrl()
+      if (e.bot) {
+        if (e.isGroup) {
+          const member = e.bot.pickMember(e.group_id, qq)
+          avatarUrl = await member.getAvatarUrl?.()
+        } else if (e.isPrivate) {
+          const friend = e.bot.pickFriend(qq)
+          avatarUrl = await friend.getAvatarUrl?.()
+        }
+      } else if (typeof Bot !== 'undefined' && Bot[e.self_id]) {
+        if (e.isGroup) {
+          const member = Bot[e.self_id].pickGroup(e.group_id)?.pickMember?.(qq) || Bot[e.self_id].pickMember(e.group_id, qq)
+          avatarUrl = await member?.getAvatarUrl?.()
+        } else if (e.isPrivate) {
+          const friend = Bot[e.self_id].pickFriend(qq)
+          avatarUrl = await friend?.getAvatarUrl?.()
+        }
       }
     } catch (err) {
     }

@@ -224,23 +224,41 @@ const Tools = {
   /**
    * 获取指定表情包的关键字
    * @param {string} memeKey - 表情包的唯一标识符
-   * @returns {string[]|null} - 返回表情包关键字数组或 null
+   * @returns {Promise<string[]|null>} - 返回表情包关键字数组或 null
    */
   async getKeyWords (memeKey) {
-    return JSON.parse(await db.meme.getByKey(memeKey, 'keyWords')) || null
+    const raw = await db.meme.getByKey(memeKey, 'keyWords')
+    if (!raw) return null
+    if (Array.isArray(raw)) return raw
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return null
+    }
   },
 
   /**
- * 获取所有的关键词
- * @param {string} [type='meme'] - 可选参数，决定从哪个数据库获取，'meme' 或 'preset'（默认 'meme'）
- * @returns {Promise<Array<string>>} - 返回包含所有关键词的数组
- */
+   * 获取所有的关键词
+   * @param {string} [type='meme'] - 可选参数，决定从哪个数据库获取，'meme' 或 'preset'（默认 'meme'）
+   * @returns {Promise<Array<string>>} - 返回包含所有关键词的数组
+   */
   async getAllKeyWords (type = 'meme') {
     const keyWordsList = type === 'preset'
       ? await db.preset.getAllSelect('name')
       : await db.meme.getAllSelect('keyWords')
 
-    return keyWordsList.map((item) => JSON.parse(item)).flat() || null
+    if (!keyWordsList || !keyWordsList.length) return []
+
+    return keyWordsList.flatMap((item) => {
+      if (!item) return []
+      if (Array.isArray(item)) return item
+      try {
+        const parsed = JSON.parse(item)
+        return Array.isArray(parsed) ? parsed : [ parsed ]
+      } catch {
+        return [ item ]
+      }
+    })
   },
 
 
@@ -287,25 +305,32 @@ const Tools = {
       return null
     }
 
+    let parsed = memeParams
+    if (typeof memeParams === 'string') {
+      try {
+        parsed = JSON.parse(memeParams)
+      } catch {
+        return null
+      }
+    }
+
     const {
+      min_texts = 0,
+      max_texts = 0,
+      min_images = 0,
+      max_images = 0,
+      default_texts = [],
+      args_type = null
+    } = parsed || {}
+
+    return {
       min_texts,
       max_texts,
       min_images,
       max_images,
       default_texts,
       args_type
-    } = JSON.parse(memeParams)
-
-    return (
-      {
-        min_texts,
-        max_texts,
-        min_images,
-        max_images,
-        default_texts,
-        args_type
-      } || null
-    )
+    }
   },
   /**
    * 获取指定表情包参数的类型
@@ -353,19 +378,33 @@ const Tools = {
   /**
    * 获取对应表情的表情
    * @param {string} key
-   * @returns {string[]|null} 返回对应表情的表情
+   * @returns {Promise<string[]|null>} 返回对应表情的表情
    */
   async getTags (key) {
-    return JSON.parse(await db.meme.getByKey(key, 'tags')) || null
+    const raw = await db.meme.getByKey(key, 'tags')
+    if (!raw) return null
+    if (Array.isArray(raw)) return raw
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return null
+    }
   },
 
   /**
    * 获取对应表情的默认文本
    * @param {string} key
-   * @returns {string[]|null} 返回对应表情的默认文本
+   * @returns {Promise<string[]|null>} 返回对应表情的默认文本
    */
   async getDeftext (key) {
-    return JSON.parse(await db.meme.getByKey(key, 'defText')) || null
+    const raw = await db.meme.getByKey(key, 'defText')
+    if (!raw) return null
+    if (Array.isArray(raw)) return raw
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return null
+    }
   },
 
   /**
