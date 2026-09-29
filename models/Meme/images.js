@@ -1,23 +1,48 @@
 import { Config } from '#components'
 import { Utils } from '#models'
 
+/**
+ * 取得当前生效的保护 QQ 名单，以及触发者本人是否受保护
+ * @param {object} e - 消息事件对象
+ * @returns {Promise<{protectedIds: Set<string>, triggerIsProtected: boolean}>}
+ */
+async function getProtectedInfo (e) {
+  if (!Config.protect.enable) {
+    return { protectedIds: new Set(), triggerIsProtected: false }
+  }
+
+  const masterQQArray = Config.protect.master
+    ? (Array.isArray(Config.masterQQ) ? Config.masterQQ : [ Config.masterQQ ]).map(String)
+    : []
+  const protectUsers = Config.protect.userEnable
+    ? (Array.isArray(Config.protect.user) ? Config.protect.user : [ Config.protect.user ]).map(String)
+    : []
+
+  const protectedIds = new Set([ ...masterQQArray, ...protectUsers ].filter(Boolean))
+  const triggerIsProtected = [ e.user_id, e.operator_id ]
+    .filter(Boolean)
+    .some((id) => protectedIds.has(String(id)))
+
+  return { protectedIds, triggerIsProtected }
+}
+
 async function handleImages (e, memeKey, userText, min_images, max_images, allUsers, formData) {
   const messageImages = await Utils.Common.getImage(e)
+  /** 头像统一存成 { qq, buffer }，表情保护按 qq 精确剔除，不依赖下标 */
   let userAvatars = []
 
   if (allUsers.length > 0) {
-    const avatarBuffers = await Utils.Common.getAvatar(e, allUsers)
-    userAvatars = avatarBuffers.filter(Boolean)
+    userAvatars = await Utils.Common.getAvatar(e, allUsers)
   }
 
+  /** 判断触发者本人是否也在保护名单里（自己用被保护的表情时不需要保护） */
+  const { protectedIds, triggerIsProtected } = await getProtectedInfo(e)
 
-  /**
-   * 特殊处理：当 min_images === 1 时，因没有多余的图片，表情保护功能会失效
-   */
+  /** 只要一张图且没有消息图片时，先补上触发者头像，保证有"换人"的备选 */
   if (min_images === 1 && messageImages.length === 0) {
-    const triggerAvatar = await Utils.Common.getAvatar(e, [ e.user_id ])
-    if (triggerAvatar[0]) {
-      userAvatars.push(triggerAvatar[0])
+    const [ triggerAvatar ] = await Utils.Common.getAvatar(e, [ e.user_id ])
+    if (triggerAvatar) {
+      userAvatars.push(triggerAvatar)
     }
   }
 
@@ -27,8 +52,9 @@ async function handleImages (e, memeKey, userText, min_images, max_images, allUs
       userAvatars.unshift(triggerAvatar)
     }
   }
+
   /** 表情保护逻辑 */
-  if (Config.protect.enable) {
+  if (Config.protect.enable && protectedIds.size > 0) {
     const protectList = Config.protect.list
     if (protectList.length > 0) {
       /** 处理表情保护列表可能含有关键词 */
@@ -36,30 +62,23 @@ async function handleImages (e, memeKey, userText, min_images, max_images, allUs
         const key = await Utils.Tools.getKey(item, 'meme')
         return key || item
       }))
-      if (memeKeys.includes(memeKey)) {
-        const masterQQArray = Array.isArray(Config.masterQQ)
-          ? Config.masterQQ.map(String)
-          : [ String(Config.masterQQ) ]
-          /** 一遍情况下单个艾特的话主人QQ在数组索引的第0个，2个艾特的话主人QQ在数组索引的第1个 */
-        const protectUser = allUsers.length === 1 ? allUsers[0] : allUsers[1]
-        if (Config.protect.master) {
-          if (!e.isMaster && masterQQArray.includes(protectUser)) {
-            userAvatars.reverse()
-          }
-        } else if (Config.protect.userEnable) {
-          const protectUsers = Array.isArray(Config.protect.user)
-            ? Config.protect.user.map(String)
-            : [ String(Config.protect.user) ]
-          if (protectUsers.includes(protectUser)) {
-            userAvatars.reverse()
+      if (memeKeys.includes(memeKey) && !triggerIsProtected) {
+        const protectAvatar = userAvatars.find((item) => protectedIds.has(String(item.qq)))
+        if (protectAvatar) {
+          /* 把被保护者移出图片序列：能剔除就剔除，只剩一张时用触发者头像顶替 */
+          const rest = userAvatars.filter((item) => item !== protectAvatar)
+          if (rest.length > 0) {
+            userAvatars = rest
+          } else {
+            const [ triggerAvatar ] = await Utils.Common.getAvatar(e, [ e.user_id ])
+            if (triggerAvatar) userAvatars = [ triggerAvatar ]
           }
         }
       }
     }
   }
 
-
-  const finalImages = [ ...userAvatars, ...messageImages ].slice(0, max_images)
+  const finalImages = [ ...userAvatars.map((item) => item.buffer), ...messageImages ].slice(0, max_images)
 
   finalImages.forEach((buffer, index) => {
     formData.append('images', new Blob([ buffer ], { type: 'image/png' }), `image${index}.png`)

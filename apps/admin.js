@@ -2,7 +2,11 @@ import lodash from 'lodash'
 
 import { Config, Render, Version } from '#components'
 
+/* 正则只编译一次，避免每条消息重复构建（Config.getCfgSchemaMap 是静态的） */
+let cachedCfgReg = null
 const sysCfgReg = () => {
+  if (cachedCfgReg) return cachedCfgReg
+
   const cfgSchema = Config.getCfgSchemaMap()
   const groupNames = Object.keys(cfgSchema).map(group => cfgSchema[group].title)
   const keys = lodash.flatMap(cfgSchema, group =>
@@ -10,7 +14,8 @@ const sysCfgReg = () => {
   )
 
   const sortedKeys = keys.sort((a, b) => b.length - a.length)
-  return new RegExp(`^#清语表情设置\\s*(?:(${groupNames.join('|')}))?\\s*(?:(${sortedKeys.join('|')}))?\\s*(.*)`)
+  cachedCfgReg = new RegExp(`^#清语表情设置\\s*(?:(${groupNames.join('|')}))?\\s*(?:(${sortedKeys.join('|')}))?\\s*(.*)`)
+  return cachedCfgReg
 }
 
 export class setting extends plugin {
@@ -29,7 +34,7 @@ export class setting extends plugin {
   }
 
   async setting (e) {
-    if (!(e.isMaster || e.user_id.toString() === '3369906077')) return true
+    if (!e.isMaster) return true
     const regRet = sysCfgReg().exec(e.msg) || []
     const cfgGroupName = regRet[1]
     const cfgKey = regRet[2]
@@ -114,9 +119,6 @@ export class setting extends plugin {
             break
           case 'string':
             val = val || currentVal || ''
-            break
-          case 'list':
-            val = Array.isArray(val) ? val : currentVal
             break
         }
       }

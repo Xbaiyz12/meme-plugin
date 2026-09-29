@@ -77,19 +77,19 @@ const cfgSchema = {
         title: '戳一戳触发',
         desc: '是否开启戳一戳触发随机表情',
         type: 'boolean',
-        def: true
+        def: false
       },
       pokeProbability: {
         title: '戳一戳触发概率',
         desc: '戳一戳触发随机表情的概率（0-100，%）',
         type: 'number',
-        def: 100
+        def: 50
       },
       pokeLimit: {
         title: '戳一戳冷却时间',
         desc: '戳一戳冷却时间（秒）',
         type: 'number',
-        def: 10
+        def: 20
       }
     }
   },
@@ -155,6 +155,12 @@ const cfgSchema = {
         type: 'list',
         def: []
       },
+      userEnable: {
+        title: '用户保护',
+        desc: '是否开启保护用户列表',
+        type: 'boolean',
+        def: false
+      },
       list: {
         title: '表情保护列表',
         desc: '表情保护列表',
@@ -182,13 +188,37 @@ const cfgSchema = {
         type: 'number',
         desc: '可选值50~200，建议100。设置高精度会提高图片的精细度，但因图片较大可能会影响渲染与发送速度',
         def: 100
+      },
+      autoUpdateRes: {
+        title: '自动更新资源',
+        desc: '是否自动更新表情包资源，开启后按下面的 cron 自动更新',
+        type: 'boolean',
+        def: true
+      },
+      autoUpdateResCron: {
+        title: '自动更新资源Cron',
+        desc: '自动更新表情包资源的 cron 表达式',
+        type: 'string',
+        def: '0 0 2 * * ?'
+      },
+      autoUpdate: {
+        title: '自动更新插件',
+        desc: '是否自动更新插件本体',
+        type: 'boolean',
+        def: false
+      },
+      autoUpdateCron: {
+        title: '自动更新插件Cron',
+        desc: '自动更新插件本体的 cron 表达式',
+        type: 'string',
+        def: '0 0 1 * * ?'
+      },
+      hijackRes: {
+        title: '劫持土块表情包',
+        desc: '是否劫持 earth-k-plugin 的表情包指令',
+        type: 'boolean',
+        def: true
       }
-    },
-    autoUpdateRes: {
-      title: '自动更新资源',
-      desc: '是否自动更新表情包资源，开启后每日凌晨会自动更新',
-      type: 'boolean',
-      def: false
     }
   }
 }

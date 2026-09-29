@@ -13,7 +13,7 @@ export default [
   },
   {
     field: 'access.blackListEnable',
-    label: '禁用表情列表',
+    label: '开启禁用列表',
     component: 'Switch',
     bottomHelpMessage: '是否开启禁用表情列表'
   },

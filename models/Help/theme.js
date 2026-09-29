@@ -15,7 +15,8 @@ export async function getThemeCfg () {
 }
 export async function getThemeData (diyStyle) {
   const helpConfig = Object.assign({}, diyStyle)
-  const colCount = Math.min(5, Math.max(parseInt(helpConfig?.colCount) || 3, 2))
+  /* 兼容 colCount / columnCount 两种写法（插件 Cfg 用的是 columnCount） */
+  const colCount = Math.min(5, Math.max(parseInt(helpConfig?.colCount ?? helpConfig?.columnCount) || 3, 2))
   const colWidth = Math.min(500, Math.max(100, parseInt(helpConfig?.colWidth) || 265))
   const width = Math.min(2500, Math.max(800, colCount * colWidth + 30))
   const theme = await getThemeCfg()

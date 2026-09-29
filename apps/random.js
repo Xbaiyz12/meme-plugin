@@ -34,40 +34,44 @@ export class random extends plugin {
         if (!params) continue
 
         const { min_texts, max_texts, min_images, max_images, default_texts, args_type } = params
-        const defText = await Utils.Tools.getDeftext(memeKey) ?? null
-        if (!defText) continue
-        if (
-          (min_texts === 1 && max_texts === 1) ||
-          (min_images === 1 && max_images === 1) ||
-          (min_texts === 1 && min_images === 1 && max_texts === 1 && max_images === 1)
-        ) {
-          try {
-            let keyWords = await Utils.Tools.getKeyWords(memeKey) ?? null
-            keyWords = Array.isArray(keyWords) ? keyWords.map(word => `[${word}]`).join(' ') : '[无]'
+        /* 只挑"单文本"或"单图片"的表情，未填的部分交给 default_texts 兜底 */
+        const isTextOnly = min_texts === 1 && max_texts === 1
+        const isImageOnly = min_images === 1 && max_images === 1
+        if (!isTextOnly && !isImageOnly) continue
 
-            const result = await Meme.make(
-              e,
-              memeKey,
-              min_texts,
-              max_texts,
-              min_images,
-              max_images,
-              default_texts,
-              args_type,
-              ''
-            )
+        /* 需要文字但没有默认文本的表情必然失败，直接跳过，避免一次随机刷一屏警告 */
+        if (isTextOnly && !isImageOnly && (!default_texts || default_texts.length === 0)) continue
 
-            let replyMessage = [
-              '本次随机表情信息如下:\n',
-              `表情的名称: ${memeKey}\n`,
-              `表情的别名: ${keyWords}\n`,
-              segment.image(result)
-            ]
-            await e.reply(replyMessage)
-            return true
-          } catch (error) {
-            throw new Error(error.message)
-          }
+        try {
+          let keyWords = await Utils.Tools.getKeyWords(memeKey) ?? null
+          keyWords = Array.isArray(keyWords) ? keyWords.map(word => `[${word}]`).join(' ') : '[无]'
+
+          const result = await Meme.make(
+            e,
+            memeKey,
+            min_texts,
+            max_texts,
+            min_images,
+            max_images,
+            default_texts,
+            args_type,
+            ''
+          )
+
+          if (!result) continue
+
+          const replyMessage = [
+            '本次随机表情信息如下:\n',
+            `表情的名称: ${memeKey}\n`,
+            `表情的别名: ${keyWords}\n`,
+            segment.image(result)
+          ]
+          await e.reply(replyMessage)
+          return true
+        } catch (error) {
+          /* 单个候选失败不能中断整个随机流程，换下一个候选继续试 */
+          logger.warn(`随机表情生成失败(${memeKey}): ${error.message}`)
+          continue
         }
       }
 

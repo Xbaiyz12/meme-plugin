@@ -64,31 +64,17 @@ class Cfg {
 
   /** 监听配置文件 */
   watch (file, name, type = 'config') {
-    let key = `${type}.${name}`
+    const key = `${type}.${name}`
     if (this.watcher[key]) return
 
     const watcher = chokidar.watch(file, { persistent: true })
     this.watcher[key] = watcher
 
-    watcher.on('change', _.debounce(async () => {
-      const oldConfig = _.cloneDeep(this.config[key] || {})
-
+    watcher.on('change', _.debounce(() => {
       delete this.config[key]
       this.config[key] = new YamlReader(file).jsonData
 
       logger.mark(`[清语表情][修改配置文件][${type}][${name}]`)
-
-      const changes = this.findDifference(oldConfig, this.config[key])
-      for (const key in changes) {
-        const value = changes[key]
-
-        let target = { type: null }
-
-        if (_.isObject(value.newValue) && value.oldValue === undefined) target.type = 'add'
-        else if (value.newValue === undefined && _.isObject(value.oldValue)) target.type = 'del'
-        else if (value.newValue === true && !value.oldValue) target.type = 'close'
-        else if (value.newValue === false && value.oldValue) target.type = 'open'
-      }
     }))
   }
 
@@ -113,25 +99,6 @@ class Cfg {
     let filePath = path.join(Version.Plugin_Path, 'config', type, `${name}.yaml`)
     new YamlReader(filePath).set(key, value)
     delete this.config[`${type}.${name}`]
-  }
-
-  /** 对比两个对象的不同值 */
-  findDifference (obj1, obj2) {
-    return _.reduce(
-      obj1,
-      (result, value, key) => {
-        if (!_.isEqual(value, obj2[key])) result[key] = { oldValue: value, newValue: obj2[key] }
-        return result
-      },
-      _.reduce(
-        obj2,
-        (result, value, key) => {
-          if (!(key in obj1)) result[key] = { oldValue: undefined, newValue: value }
-          return result
-        },
-        {}
-      )
-    )
   }
 }
 

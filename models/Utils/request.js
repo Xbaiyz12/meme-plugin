@@ -34,13 +34,16 @@ class Request {
       return {
         success: true,
         statcode: response.status,
+        headers: response.headers || {},
         data: response.data
       }
     } catch (error) {
       const errorMessage = this.handleError(error)
       return {
         success: false,
-        statcode: error.code,
+        statcode: error.response?.status ?? null,
+        code: error.code,
+        headers: {},
         data: {},
         message: errorMessage
       }
@@ -82,16 +85,13 @@ class Request {
    * POST 请求
    */
   async post (url, data = {}, headers = {}, responseType = 'json') {
-    const isFormData = data instanceof FormData
-
     return this.request({
       url,
       method: 'POST',
       data,
       headers: {
         ...this.axiosInstance.defaults.headers,
-        ...headers,
-        ...(isFormData ? {} : {})
+        ...headers
       },
       responseType
     })
@@ -116,7 +116,7 @@ class Request {
           errorMessage = JSON.stringify(error.response.data)
         }
       } else {
-        errorMessage = JSON.stringify('未知错误')
+        errorMessage = '未知错误'
       }
 
       return errorMessage

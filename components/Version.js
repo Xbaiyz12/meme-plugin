@@ -40,9 +40,6 @@ export const Version = {
   get Bot_Path () {
     return Path
   },
-  get Plugin_Logs () {
-    return changelogs
-  },
   get Plugin_Path () {
     return Plugin_Path
   },

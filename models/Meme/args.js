@@ -5,11 +5,14 @@ import { Utils } from '#models'
 async function handleArgs (e, memeKey, userText, allUsers, formData, isPreset, Preset) {
   const argsArray = {}
 
-  const argsMatches = userText.match(/#(\S+)\s+([^#]+)/g)
+  /* 参数值只取一个 token，否则 "#number 1 你好" 会把正文一起吞进参数值 */
+  const argsReg = /#(\S+)\s+(\S+)/g
+
+  const argsMatches = userText.match(argsReg)
   if (argsMatches) {
     for (const match of argsMatches) {
-      const [ _, key, value ] = match.match(/#(\S+)\s+([^#]+)/)
-      argsArray[key] = value.trim()
+      const [ _, key, value ] = match.match(/#(\S+)\s+(\S+)/)
+      argsArray[key.toLowerCase()] = value
     }
   }
   if (isPreset && Preset?.arg_name) {
@@ -30,7 +33,7 @@ async function handleArgs (e, memeKey, userText, allUsers, formData, isPreset, P
 
   return {
     success: true,
-    text: userText.replace(/#(\S+)\s+([^#]+)/g, '').trim()
+    text: userText.replace(argsReg, '').trim()
   }
 }
 
@@ -48,18 +51,19 @@ async function handle (e, key, allUsers, args) {
   }
 
   const paramMap = paramInfos.reduce((acc, { name }) => {
-    acc[name] = true
+    acc[name.toLowerCase()] = name
     return acc
   }, {})
 
   for (const [ argName, argValue ] of Object.entries(args)) {
-    if (!paramMap[argName]) {
+    const canonical = paramMap[argName.toLowerCase()]
+    if (!canonical) {
       return {
         success: false,
         message: `该表情不支持参数：${argName}`
       }
     }
-    argsObj[argName] = argValue
+    argsObj[canonical] = argValue
   }
 
   const userInfos = [

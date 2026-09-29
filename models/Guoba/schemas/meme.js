@@ -34,6 +34,12 @@ export default [
     bottomHelpMessage: '是否强制使用#触发, 开启后必须使用#触发'
   },
   {
+    field: 'meme.imagesInMessage',
+    label: '消息图片',
+    component: 'Switch',
+    bottomHelpMessage: '是否开启获取消息中的图片'
+  },
+  {
     field: 'meme.quotedImages',
     label: '引用图片',
     component: 'Switch',
@@ -70,7 +76,7 @@ export default [
     bottomHelpMessage: '戳一戳冷却时间（秒）',
     componentProps: {
       min: 0,
-      max: 3600, 
+      max: 3600,
       precision: 0,
       step: 1
     }

@@ -3,6 +3,8 @@ import chalk from 'chalk'
 import { Config } from '#components'
 
 (async () => {
+  if (!Config.other.hijackRes) return
+
   let dailyNoteByWidget
   try {
     dailyNoteByWidget = (await import('../../earth-k-plugin/apps/emoticon.js')).dailyNoteByWidget
@@ -11,13 +13,11 @@ import { Config } from '#components'
     return
   }
 
-  if (Config.other.hijackRes) {
-    try {
-      dailyNoteByWidget.prototype.accept = async function () {
-        logger.debug(chalk.yellow('[清语表情:表情包] 已劫持土块插件表情包'))
-      }
-    } catch (error) {
-      logger.error('[清语表情:表情包] 劫持土块插件表情包失败')
+  try {
+    dailyNoteByWidget.prototype.accept = async function () {
+      logger.debug(chalk.yellow('[清语表情:表情包] 已劫持土块插件表情包'))
     }
+  } catch (error) {
+    logger.error('[清语表情:表情包] 劫持土块插件表情包失败')
   }
 })()

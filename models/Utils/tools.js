@@ -215,11 +215,13 @@ const Tools = {
   async getKey (keyword, type = 'meme') {
     const dbField = type === 'preset' ? db.preset : db.meme
     const fieldName = type === 'preset' ? 'name' : 'keyWords'
-    const key = type === 'preset' ? 'key' : 'key'
+    const keyField = 'key'
 
-    return (
-      (await dbField.getByField(fieldName, keyword, key)).toString() || null
-    )
+    const keys = await dbField.getByField(fieldName, keyword, keyField)
+    /* getByField 返回数组；一个关键词被多个表情占用时取第一个，避免拼成 "keyA,keyB" */
+    const key = Array.isArray(keys) ? keys.filter(Boolean)[0] : keys
+
+    return key || null
   },
   /**
    * 获取指定表情包的关键字
@@ -269,7 +271,7 @@ const Tools = {
   async getAllKeys () {
     const keyList = await db.meme.getAllSelect('key')
 
-    return keyList.flat() || null
+    return (keyList || []).flat()
   },
 
   /**
@@ -419,22 +421,22 @@ const Tools = {
 
   /**
    * 检查输入是否在禁用表情包列表中
+   * 先直接比对输入，再把输入和黑名单项都解析成 meme key 比对
    * @param {string} input - 输入的关键字或表情包键
    * @returns {Promise<boolean>} - 如果在禁用列表中返回 true，否则返回 false
    */
   async isBlacklisted (input) {
-    const blacklistedKeys = await Promise.all(
-      Config.access.blackList.map(async (item) => {
-        return (await this.getKey(item, 'meme')) || item
-      })
-    )
+    const list = (Config.access.blackList || []).map((item) => String(item))
+    if (!list.includes(String(input))) {
+      const inputKey = await this.getKey(input, 'meme')
+      if (!inputKey) return false
 
-    if (blacklistedKeys.includes(input)) {
-      return true
+      /* getKey 一次只取一个关键词，这里逐个解析黑名单项并比对 key */
+      const resolved = await Promise.all(list.map((item) => this.getKey(item, 'meme')))
+      if (!resolved.includes(inputKey)) return false
     }
 
-    const memeKey = await this.getKey(input, 'meme')
-    return blacklistedKeys.includes(memeKey)
+    return true
   }
 }
 

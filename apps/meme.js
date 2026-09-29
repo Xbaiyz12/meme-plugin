@@ -13,14 +13,51 @@ const createRegex = async (getKeywords) => {
   if (!keywords) return null
 
   const prefix = Config.meme.forceSharp ? '^#' : '^#?'
-  const escapedKeywords = keywords.map((keyword) =>
-    keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  )
-  return new RegExp(`${prefix}(${escapedKeywords.join('|')})(.*)`, 'i')
+  /* 长关键词优先，避免 "抱抱" 被短关键词 "抱" 抢先匹配后又被防误触发拦截 */
+  const sortedKeywords = [ ...keywords ].sort((a, b) => b.length - a.length)
+
+  /* 只有会"吃掉"更长关键词的短词才需要边界断言，其余保持原样以避免误伤
+     （例如 "滑稽" 不会被 "滑稽撅" 遮蔽，加了断言反而无法触发） */
+  const keywordSet = new Set(sortedKeywords)
+  const toBoundary = new Set()
+  for (const other of sortedKeywords) {
+    for (let i = 1; i < other.length; i++) {
+      const head = other.slice(0, i)
+      if (keywordSet.has(head)) toBoundary.add(head)
+    }
+  }
+
+  const escape = (keyword) => keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const body = sortedKeywords
+    .map((keyword) => {
+      const escaped = escape(keyword)
+      /* 后面不能紧跟中文正文，否则让位给更长的关键词 */
+      return toBoundary.has(keyword) ? `(?:${escaped})(?![\\u4e00-\\u9fff])` : escaped
+    })
+    .join('|')
+
+  return new RegExp(`${prefix}(${body})(.*)`, 'i')
 }
 
-memeRegExp = await createRegex(() => Utils.Tools.getAllKeyWords('meme'))
-presetRegExp = await createRegex(() => Utils.Tools.getAllKeyWords('preset'))
+/**
+ * 刷新关键词正则
+ * createRegex 是异步的，先在闭包里算好再赋值，避免读取时拿到 Promise
+ * @returns {Promise<boolean>}
+ */
+const refreshRegExp = async () => {
+  const [ nextMeme, nextPreset ] = await Promise.all([
+    createRegex(() => Utils.Tools.getAllKeyWords('meme')),
+    createRegex(() => Utils.Tools.getAllKeyWords('preset'))
+  ])
+  memeRegExp = nextMeme
+  presetRegExp = nextPreset
+  return true
+}
+
+await refreshRegExp()
+
+/* 导出 live binding：update.js 刷新后能读到最新正则 */
+export { memeRegExp, presetRegExp }
 
 export class meme extends plugin {
   constructor () {
@@ -28,27 +65,24 @@ export class meme extends plugin {
       name: '清语表情:表情包生成',
       event: 'message',
       priority: -Infinity,
-      rule: []
+      rule: [
+        {
+          reg: memeRegExp,
+          fnc: 'meme'
+        },
+        {
+          reg: presetRegExp,
+          fnc: 'preset'
+        }
+      ]
     })
-
-    this.rule.push(
-      {
-        reg: memeRegExp,
-        fnc: 'meme'
-      },
-      {
-        reg: presetRegExp,
-        fnc: 'preset'
-      }
-    )
   }
 
   /**
    * 更新正则
    */
   async updateRegExp () {
-    memeRegExp = await createRegex(() => Utils.Tools.getAllKeyWords('meme'))
-    presetRegExp = await createRegex(() => Utils.Tools.getAllKeyWords('preset'))
+    await refreshRegExp()
 
     this.rule = [
       {
@@ -77,7 +111,6 @@ export class meme extends plugin {
       'preset'
     )
   }
-
   /**
    * 通用处理函数, 用于验证权限获取需要的参数之类的
    */
@@ -185,3 +218,5 @@ export class meme extends plugin {
     }
   }
 }
+
+export { refreshRegExp }

@@ -21,28 +21,6 @@ const Common = {
   },
 
   /**
-   * 判断是否在海外环境
-   * @returns {Promise<boolean>} - 如果在海外环境返回 true，否则返回 false
-   * @throws {Error} - 如果获取 IP 位置失败，则抛出异常
-   */
-  async isAbroad () {
-    const urls = [
-      'https://blog.cloudflare.com/cdn-cgi/trace',
-      'https://developers.cloudflare.com/cdn-cgi/trace'
-    ]
-
-    try {
-      const response = await Promise.any(urls.map(url => Request.get(url, {}, {}, 'text')))
-      const traceMap = Object.fromEntries(
-        response.data.split('\n').filter(line => line).map(line => line.split('='))
-      )
-      return traceMap.loc !== 'CN'
-    } catch (error) {
-      throw new Error(`获取 IP 所在地区出错: ${error.message}`)
-    }
-  },
-
-  /**
    * 获取图片 Buffer
    * @param {string | Buffer} image - 图片地址或 Buffer
    * @returns {Promise<Buffer>} - 返回图片的 Buffer 数据
@@ -73,6 +51,7 @@ const Common = {
   async getImageBase64 (image, withPrefix = false) {
     if (!image) {
       logger.error('图片地址不能为空')
+      return null
     }
 
     if (typeof image === 'string' && image.startsWith('base64://')) {
@@ -91,14 +70,16 @@ const Common = {
       return withPrefix ? `base64://${base64Data}` : base64Data
     } else {
       logger.error(`图片处理失败, 错误信息: ${response.message}`)
+      return null
     }
   },
   /**
    * 获取用户头像
+   * 返回 { qq, buffer } 列表，调用方不用再靠下标去猜是哪个 QQ（部分失败时下标会错位）
    * @param {object} e - 消息事件对象
    * @param {string | string[]} userList - 单个或多个 QQ 号
-   * @returns {Promise<Buffer[]>} - 返回头像 Buffer 数组
-   * @throws {Error} - 如果用户列表为空或头像获取失败，则抛出异常
+   * @returns {Promise<Array<{qq: string, buffer: Buffer}>>} - 失败的会跳过，绝不返回 null
+   * @throws {Error} - 用户列表为空时抛出异常
    */
   async getAvatar (e, userList) {
     if (!userList) {
@@ -136,10 +117,12 @@ const Common = {
         const remoteHeadResponse = await Request.head(avatarUrl).catch(() => null)
 
         if (remoteHeadResponse && remoteHeadResponse.success) {
-          const remoteLastModified = new Date(remoteHeadResponse.data['last-modified'])
+          /* headers 在 remoteHeadResponse.headers，HEAD 的 body 里没有 last-modified */
+          const lastModified = remoteHeadResponse.headers?.['last-modified']
+          const remoteLastModified = lastModified ? new Date(lastModified) : null
           const localLastModified = localStats.mtime
 
-          if (localLastModified >= remoteLastModified) {
+          if (remoteLastModified && !isNaN(remoteLastModified.getTime()) && localLastModified >= remoteLastModified) {
             return await fs.readFile(cachePath)
           }
         }
@@ -155,13 +138,52 @@ const Common = {
       }
     }
 
-    try {
-      return await Promise.all(userList.map((qq) => downloadAvatar(qq)))
-    } catch (err) {
-      logger.error(`获取头像失败: ${err}`)
-      return null
-    }
+    /* 单个头像失败不再让整批失败：返回成功的那部分，并带上对应 QQ */
+    const results = await Promise.allSettled(userList.map((qq) => downloadAvatar(qq)))
+    const avatars = []
+    results.forEach((item, index) => {
+      if (item.status === 'fulfilled' && item.value) {
+        avatars.push({ qq: String(userList[index]), buffer: item.value })
+      } else if (item.status === 'rejected') {
+        logger.warn(`获取头像失败(${userList[index]}): ${item.reason?.message || item.reason}`)
+      }
+    })
+    return avatars
   },
+  /**
+   * 获取引用消息的发送者 QQ
+   * 历史消息可能返回空数组、也可能没有 sender，这里统一做保护
+   * @param {object} e - 消息事件对象
+   * @param {object|object[]|null} [resolvedSource] - 已经取到的引用消息，传入可避免重复请求
+   * @returns {Promise<string|null>}
+   */
+  async getQuotedUser (e, resolvedSource = null) {
+    let source = resolvedSource
+    if (!source) {
+      try {
+        if (e.reply_id) {
+          source = await e.getReply()
+        } else if (e.source) {
+          if (e.isGroup) {
+            source = await Bot[e.self_id].pickGroup(e.group_id).getChatHistory(e.source.seq || e.reply_id, 1)
+          } else if (e.isPrivate) {
+            source = await Bot[e.self_id].pickFriend(e.user_id).getChatHistory(e.source.time || e.reply_id, 1)
+          }
+        }
+      } catch (error) {
+        logger.debug(`获取引用消息失败: ${error.message}`)
+        return null
+      }
+    }
+
+    if (!source) return null
+
+    const item = Array.isArray(source) ? source[0] : source
+    const sender = item?.sender?.user_id ?? item?.user_id
+
+    return sender ? String(sender) : null
+  },
+
   /**
    * 获取图片列表（包括消息和引用消息中的图片）
    * @param {object} e - 消息对象
@@ -208,11 +230,12 @@ const Common = {
       imagesInMessage.length === 0 &&
       source &&
       (e.source || e.reply_id)) {
-      const sourceArray = Array.isArray(source) ? source : [ source ]
-      const quotedUser = sourceArray[0].sender.user_id
-      const avatarBuffer = await this.getAvatar(e, quotedUser)
-      if (avatarBuffer[0]) {
-        quotedImages.push(avatarBuffer[0])
+      const quotedUser = await this.getQuotedUser(e, source)
+      if (quotedUser) {
+        const [ quotedAvatar ] = await this.getAvatar(e, [ quotedUser ])
+        if (quotedAvatar?.buffer) {
+          quotedImages.push(quotedAvatar.buffer)
+        }
       }
     }
 

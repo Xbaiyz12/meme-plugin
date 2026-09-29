@@ -1,4 +1,4 @@
-import { col, DataTypes, fn, literal, Op, sequelize } from './base.js'
+import { col, DataTypes, fn, queryByField, sequelize } from './base.js'
 
 /**
  * 定义 `meme` 表（包含 JSON 数据存储、关键字、参数、标签等）
@@ -176,7 +176,7 @@ export async function get (key) {
  * @returns 返回查询到的数据或 null
  */
 export async function getByKey (key, name = '*') {
-  const queryOptions = {}
+  const queryOptions = { raw: true }
 
   if (name !== '*' && Array.isArray(name)) {
     queryOptions.attributes = name
@@ -192,7 +192,8 @@ export async function getByKey (key, name = '*') {
     return res[name] ?? null
   }
 
-  return res.toJSON()
+  /* raw 查询返回的是普通对象，没有 toJSON() */
+  return typeof res.toJSON === 'function' ? res.toJSON() : res
 }
 
 /**
@@ -203,36 +204,7 @@ export async function getByKey (key, name = '*') {
  * @returns 返回符合条件的记录
  */
 export async function getByField (field, value, returnField = 'key') {
-  if (!field) {
-    throw new Error('查询字段不能为空')
-  }
-
-  const values = Array.isArray(value) ? value : [ value ]
-
-  const whereConditions = values.map(v => {
-    if (typeof v === 'number') {
-      return { [field]: v }
-    }
-    return {
-      [Op.or]: [
-        { [field]: v },
-        literal(`CASE WHEN json_valid(${field}) THEN EXISTS (SELECT 1 FROM json_each(${field}) WHERE json_each.value = '${v}') ELSE 0 END`)
-      ]
-    }
-  })
-
-  const whereClause = { [Op.and]: whereConditions }
-
-  const attributes = Array.isArray(returnField) ? returnField : [ returnField ]
-
-  const res = await table.findAll({
-    attributes,
-    where: whereClause
-  })
-
-  return Array.isArray(returnField)
-    ? res.map(item => item.toJSON())
-    : res.map(item => item[returnField])
+  return queryByField(table, field, value, returnField)
 }
 
 /**
@@ -263,12 +235,4 @@ export async function getAll () {
 export async function remove (key) {
   const where = Array.isArray(key) ? { key: { [Op.in]: key } } : { key }
   return Boolean(await table.destroy({ where }))
-}
-
-/**
- * 清空所有表情包记录
- * @returns {Promise<boolean>}
- */
-export async function removeAll () {
-  return Boolean(await table.destroy({ truncate: true }))
 }

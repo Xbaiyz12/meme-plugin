@@ -1,7 +1,7 @@
 import { Config } from '#components'
 import { Utils } from '#models'
 
-import { handle, handleArgs } from './args.js'
+import { handleArgs } from './args.js'
 import { handleImages } from './images.js'
 import { preset } from './preset.js'
 import { handleTexts } from './texts.js'
@@ -17,8 +17,8 @@ import { handleTexts } from './texts.js'
  * @param {string[]} default_texts 默认文字数组
  * @param {string} args_type 参数类型
  * @param {string} userText 用户输入文本
- * @param {boolean} isArg 是否为参数模式
- * @param {object} Arg 参数模式下的参数
+ * @param {boolean} isPreset 是否为预设模式
+ * @param {object} extraData 预设模式下带 { Preset }
  * @returns {Promise<string>} 生成的表情包图片base64 数据
  */
 async function make (
@@ -35,21 +35,8 @@ async function make (
   { Preset } = {}
 ) {
   const formData = new FormData()
-  let quotedUser
-  let source = null
-  if (e.reply_id) {
-    source = await e.getReply()
-  } else if (e.source) {
-    if (e.isGroup) {
-      source = await Bot[e.self_id].pickGroup(e.group_id).getChatHistory(e.source.seq, 1)
-    } else if (e.isPrivate) {
-      source = await Bot[e.self_id].pickFriend(e.user_id).getChatHistory(e.source.time, 1)
-    }
-  }
-  if (source) {
-    const sourceArray = Array.isArray(source) ? source : [ source ]
-    quotedUser = sourceArray[0].sender.user_id.toString()
-  }
+  /* 引用消息的发送者（历史消息可能为空数组或缺少 sender，统一交给 Common 保护） */
+  const quotedUser = await Utils.Common.getQuotedUser(e)
   const allUsers = [
     ...new Set([
       ...e.message
@@ -93,7 +80,7 @@ async function make (
      * 处理文字类型
      */
     if (max_texts !== 0) {
-      let finalTexts = await handleTexts(e, userText, min_texts, max_texts, default_texts, allUsers, formData)
+      const finalTexts = await handleTexts(e, userText, min_texts, max_texts, default_texts, allUsers, formData)
       if (!finalTexts.success) {
         throw new Error(finalTexts.message)
       }
@@ -122,4 +109,4 @@ async function make (
   }
 }
 
-export { handle, handleArgs, handleImages, handleTexts, make, preset }
+export { make, preset }

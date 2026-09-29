@@ -5,8 +5,8 @@ import { Utils } from '#models'
 
 import pluginsLoader from '../../../lib/plugins/loader.js'
 import { update as Update } from '../../other/update.js'
-import { meme } from './meme.js'
 import { list } from './list.js'
+import { meme, memeRegExp, presetRegExp, refreshRegExp } from './meme.js'
 
 export class update extends plugin {
   constructor () {
@@ -47,9 +47,10 @@ export class update extends plugin {
       logFnc: '[清语表情]自动更新]',
       msg: `#更新${Version.Plugin_Name}`,
       reply: async (msg) => {
-        const masters = Object.keys(Config.masterQQ)
+        /* Config.masterQQ 在 Yunzai/TRSS 里是数组，不能用 Object.keys 取下标 */
+        const masters = Array.isArray(Config.masterQQ) ? Config.masterQQ : [ Config.masterQQ ]
         for (const master of masters) {
-          if (master.toString().length > 11) {
+          if (!master || master.toString().length > 11) {
             logger.info(chalk.yellow(`[${Version.Plugin_AliasName}] 更新推送跳过 QQBot`))
             continue
           }
@@ -73,9 +74,9 @@ export class update extends plugin {
   }
 
   async update (e) {
-    if (!(e.isMaster || e.user_id.toString() === '3369906077')) return
+    if (!e.isMaster) return
     const Type = e.msg.includes('强制') ? '#强制更新' : '#更新'
-    if (e) e.msg = Type + Version.Plugin_Name
+    e.msg = Type + Version.Plugin_Name
     const up = new Update(e)
     up.e = e
     return up.update()
@@ -89,7 +90,7 @@ export class update extends plugin {
   }
 
   async updateRes (e, isTask = false) {
-    if (!isTask && (!(e.isMaster || e.user_id.toString() === '3369906077'))) {
+    if (!isTask && !e.isMaster) {
       await e.reply('只有主人才能更新表情包数据')
       return
     }
@@ -105,23 +106,26 @@ export class update extends plugin {
         Utils.Tools.generateMemeData(forceUpdate),
         Utils.Tools.generatePresetData()
       ])
-      const Plugin = new meme()
-      const pluginName = Plugin.name
-      const pluginKey = pluginsLoader.priority.find((p) => {
-        if (p.plugin) {
-          return p.plugin.name === pluginName
-        } else if (p.class) {
-          return p.name === pluginName
-        }
+      /* 刷新关键词正则：必须同步改掉加载器里那个已注册实例身上的 reg，
+         否则新表情的触发词要重启 bot 才会生效 */
+      const pluginName = new meme().name
+      const pluginEntry = pluginsLoader.priority.find((p) => {
+        if (p.plugin) return p.plugin.name === pluginName
+        if (p.class) return p.name === pluginName
         return false
       })
-      let pluginInfo
-      if (pluginKey.plugin) {
-        pluginInfo = pluginKey.plugin
+      const pluginInfo = pluginEntry?.plugin || (pluginEntry?.class ? new pluginEntry.class() : null)
+
+      await refreshRegExp()
+
+      if (pluginInfo) {
+        for (const rule of pluginInfo.rule || []) {
+          if (rule.fnc === 'meme') rule.reg = memeRegExp
+          if (rule.fnc === 'preset') rule.reg = presetRegExp
+        }
       } else {
-        pluginInfo = new pluginKey.class()
+        logger.warn(`[${Version.Plugin_AliasName}] 未在加载器中找到表情插件实例，关键词正则未能刷新`)
       }
-      await pluginInfo.updateRegExp()
 
       // 更新完成后主动刷新/重置表情列表缓存
       list.cache = {
